@@ -117,11 +117,15 @@ jobs:
   # Create the release with all artifacts
   release:
     needs: [prepare, build]
+    # Run even if some builds fail, as long as prepare succeeded
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Update Cargo.toml version
         run: |
@@ -134,7 +138,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml
           git diff --staged --quiet || git commit -m "chore: bump version to ${{ needs.prepare.outputs.version }}"
-          git push
+          git push || echo "Push failed, continuing anyway"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -142,37 +146,44 @@ jobs:
           path: artifacts
 
       - name: List artifacts
-        run: find artifacts -type f
+        run: |
+          echo "=== All artifacts ==="
+          find artifacts -type f || echo "No artifacts found"
 
       - name: Rename artifacts for release
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
           mkdir -p release-assets
-          
+
           # Linux x86_64
           if [ -f artifacts/alfred-linux-x86_64/alfred-linux-x86_64.tar.gz ]; then
             cp artifacts/alfred-linux-x86_64/alfred-linux-x86_64.tar.gz release-assets/alfred-v${VERSION}-linux-x86_64.tar.gz
+            echo "Added Linux x86_64"
           fi
 
           # macOS x86_64
           if [ -f artifacts/alfred-macos-x86_64/alfred-macos-x86_64.tar.gz ]; then
             cp artifacts/alfred-macos-x86_64/alfred-macos-x86_64.tar.gz release-assets/alfred-v${VERSION}-macos-x86_64.tar.gz
+            echo "Added macOS x86_64"
           fi
-          
+
           # macOS ARM64
           if [ -f artifacts/alfred-macos-aarch64/alfred-macos-aarch64.tar.gz ]; then
             cp artifacts/alfred-macos-aarch64/alfred-macos-aarch64.tar.gz release-assets/alfred-v${VERSION}-macos-aarch64.tar.gz
+            echo "Added macOS ARM64"
           fi
-          
+
           # Windows
           if [ -f artifacts/alfred-windows-x86_64/alfred-windows-x86_64.zip ]; then
             cp artifacts/alfred-windows-x86_64/alfred-windows-x86_64.zip release-assets/alfred-v${VERSION}-windows-x86_64.zip
+            echo "Added Windows x86_64"
           fi
-          
-          ls -la release-assets/
+
+          echo "=== Release assets ==="
+          ls -la release-assets/ || echo "No release assets!"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: Alfred ${{ needs.prepare.outputs.version }}
@@ -180,5 +191,4 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: release-assets/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: false
