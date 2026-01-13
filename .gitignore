@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target
+
+CLAUDE.md
+
+# Cargo lock for binaries (keep for libraries)
+# Cargo.lock
+
+# IDE
+.idea
+.vscode
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log

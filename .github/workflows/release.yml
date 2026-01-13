@@ -1,0 +1,197 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # First job: Check version and prepare release
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from VERSION file
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '\n\r ')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Check if tag exists
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/v${{ steps.version.outputs.version }}"; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists, skipping release"
+            exit 1
+          fi
+
+  # Build for each platform
+  build:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: alfred-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: alfred-linux-aarch64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: alfred-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: alfred-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: alfred-windows-x86_64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Cargo.toml version
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            sed -i '' "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          else
+            sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+          fi
+          echo "Updated Cargo.toml to version $VERSION"
+          cat Cargo.toml | head -10
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/alfred dist/
+          cp target/${{ matrix.target }}/release/alferd dist/ 2>/dev/null || true
+          cd dist
+          tar -czvf ../${{ matrix.artifact }}.tar.gz *
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target/${{ matrix.target }}/release/alfred.exe dist/
+          Copy-Item target/${{ matrix.target }}/release/alferd.exe dist/ -ErrorAction SilentlyContinue
+          Compress-Archive -Path dist/* -DestinationPath ${{ matrix.artifact }}.zip
+
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+
+  # Create the release with all artifacts
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Cargo.toml version
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" Cargo.toml
+
+      - name: Commit version update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ needs.prepare.outputs.version }}"
+          git push
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Rename artifacts for release
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          mkdir -p release-assets
+          
+          # Linux x86_64
+          if [ -f artifacts/alfred-linux-x86_64/alfred-linux-x86_64.tar.gz ]; then
+            cp artifacts/alfred-linux-x86_64/alfred-linux-x86_64.tar.gz release-assets/alfred-v${VERSION}-linux-x86_64.tar.gz
+          fi
+          
+          # Linux ARM64
+          if [ -f artifacts/alfred-linux-aarch64/alfred-linux-aarch64.tar.gz ]; then
+            cp artifacts/alfred-linux-aarch64/alfred-linux-aarch64.tar.gz release-assets/alfred-v${VERSION}-linux-aarch64.tar.gz
+          fi
+          
+          # macOS x86_64
+          if [ -f artifacts/alfred-macos-x86_64/alfred-macos-x86_64.tar.gz ]; then
+            cp artifacts/alfred-macos-x86_64/alfred-macos-x86_64.tar.gz release-assets/alfred-v${VERSION}-macos-x86_64.tar.gz
+          fi
+          
+          # macOS ARM64
+          if [ -f artifacts/alfred-macos-aarch64/alfred-macos-aarch64.tar.gz ]; then
+            cp artifacts/alfred-macos-aarch64/alfred-macos-aarch64.tar.gz release-assets/alfred-v${VERSION}-macos-aarch64.tar.gz
+          fi
+          
+          # Windows
+          if [ -f artifacts/alfred-windows-x86_64/alfred-windows-x86_64.zip ]; then
+            cp artifacts/alfred-windows-x86_64/alfred-windows-x86_64.zip release-assets/alfred-v${VERSION}-windows-x86_64.zip
+          fi
+          
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Alfred ${{ needs.prepare.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
