@@ -102,6 +102,25 @@ install_alfred() {
     tmp_dir=$(mktemp -d)
     trap "rm -rf $tmp_dir" EXIT
 
+    # Check if pre-built binary is available for this platform
+    # Linux ARM64 requires building from source due to llama-cpp C++ dependencies
+    if [[ "$OS" == "linux" && "$ARCH" == "aarch64" ]]; then
+        warn "Pre-built binaries are not available for Linux ARM64"
+        echo ""
+        echo -e "${BOLD}Linux ARM64 requires building from source:${NC}"
+        echo ""
+        echo "  # Install Rust if needed"
+        echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        echo ""
+        echo "  # Build Alfred"
+        echo "  git clone https://github.com/${REPO}.git"
+        echo "  cd alfred"
+        echo "  cargo build --release"
+        echo "  sudo cp target/release/alfred target/release/alferd ${INSTALL_DIR}/"
+        echo ""
+        exit 1
+    fi
+
     # Construct download URL
     local archive_name="alfred-${VERSION}-${OS}-${ARCH}.tar.gz"
     local download_url="https://github.com/${REPO}/releases/download/${VERSION}/${archive_name}"
