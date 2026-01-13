@@ -1,8 +1,8 @@
 use colored::Colorize;
 
 pub fn run() {
-    println!(
-        r#"
+  println!(
+    r#"
 {} - AI-powered git workflow assistant
 
 {}
@@ -41,22 +41,22 @@ pub fn run() {
   Everything runs locally - no API keys or subscriptions needed.
   Files stored in ~/.alfred/
 "#,
-        "alfred".bold(),
-        "USAGE".bold(),
-        "AI-ENHANCED COMMANDS".bold(),
-        "setup".cyan(),
-        "commit".cyan(),
-        "rebase".cyan(),
-        "resolve".cyan(),
-        "branch".cyan(),
-        "config".cyan(),
-        "help".cyan(),
-        "GIT PASSTHROUGH".bold(),
-        "alfred status".dimmed(),
-        "alfred push".dimmed(),
-        "alfred log --oneline".dimmed(),
-        "alfred stash".dimmed(),
-        "EXAMPLES".bold(),
-        "GETTING STARTED".bold(),
-    );
+    "alfred".bold(),
+    "USAGE".bold(),
+    "AI-ENHANCED COMMANDS".bold(),
+    "setup".cyan(),
+    "commit".cyan(),
+    "rebase".cyan(),
+    "resolve".cyan(),
+    "branch".cyan(),
+    "config".cyan(),
+    "help".cyan(),
+    "GIT PASSTHROUGH".bold(),
+    "alfred status".dimmed(),
+    "alfred push".dimmed(),
+    "alfred log --oneline".dimmed(),
+    "alfred stash".dimmed(),
+    "EXAMPLES".bold(),
+    "GETTING STARTED".bold(),
+  );
 }
