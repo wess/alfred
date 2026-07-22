@@ -350,3 +350,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) — Inference engine
 - [llama-cpp-2](https://github.com/utilityai/llama-cpp-rs) — Rust bindings
 - [Phi-3](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf) — Default AI model by Microsoft
+
+♥ [Sponsor this project](https://github.com/sponsors/wess)
